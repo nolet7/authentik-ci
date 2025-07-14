@@ -3,7 +3,7 @@ name: CI - Build and Push Authentik
 on:
   push:
     branches:
-      - main
+      - master
     paths:
       - Dockerfile
       - docker-compose.yml
