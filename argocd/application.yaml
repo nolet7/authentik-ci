@@ -1,0 +1,19 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: authentik
+  namespace: argocd
+spec:
+  destination:
+    namespace: authentik
+    server: https://kubernetes.default.svc
+  source:
+    repoURL: https://github.com/nolet7/authentik-ci.git
+    targetRevision: main
+    path: helm/authentik
+  project: default
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+

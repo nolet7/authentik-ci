@@ -1,0 +1,7 @@
+*.env
+vault/token
+vault/secrets.sh
+ssl/*.crt
+ssl/*.key
+__pycache__/
+
