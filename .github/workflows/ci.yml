@@ -17,8 +17,11 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v3
 
-      - name: Set up Vault CLI
-        uses: hashicorp/setup-vault@v1
+      - name: Install Vault CLI
+        run: |
+          curl -fsSL https://apt.releases.hashicorp.com/gpg | gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | tee /etc/apt/sources.list.d/hashicorp.list
+          apt-get update && apt-get install vault -y
 
       - name: Authenticate to Vault
         run: |
@@ -27,7 +30,6 @@ jobs:
           VAULT_ADDR: http://192.168.0.116:8200
 
       - name: Pull secrets from Vault
-        id: secrets
         run: |
           echo "AUTHENTIK_SECRET_KEY=$(vault kv get -field=AUTHENTIK_SECRET_KEY secret/Dev-secret/authentik)" >> $GITHUB_ENV
           echo "POSTGRES_USER=$(vault kv get -field=POSTGRES_USER secret/Dev-secret/authentik)" >> $GITHUB_ENV
