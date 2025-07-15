@@ -55,7 +55,8 @@ jobs:
 
       - name: Build and tag all images
         run: |
-          docker compose build --build-arg AUTHENTIK_SECRET_KEY=$AUTHENTIK_SECRET_KEY \
+          docker compose build \
+            --build-arg AUTHENTIK_SECRET_KEY=$AUTHENTIK_SECRET_KEY \
             --build-arg POSTGRES_USER=$POSTGRES_USER \
             --build-arg POSTGRES_PASSWORD=$POSTGRES_PASSWORD \
             --build-arg DATABASE_URL=$DATABASE_URL \
@@ -63,14 +64,8 @@ jobs:
             --build-arg SMTP_PORT=$SMTP_PORT \
             --build-arg SMTP_USER=$SMTP_USER \
             --build-arg SMTP_PASS=$SMTP_PASS \
-            --build-arg SMTP_USE_TLS=$SMTP_USE_TLS
-
-          docker tag authentik-ci-authentik noletengine/authentik:${{ env.VERSION }}
-          docker tag authentik-ci-authentik noletengine/authentik:latest
-          docker tag authentik-ci-worker noletengine/authentik-worker:${{ env.VERSION }}
-          docker tag authentik-ci-worker noletengine/authentik-worker:latest
-          docker tag authentik-ci-nginx noletengine/nginx:${{ env.VERSION }}
-          docker tag authentik-ci-nginx noletengine/nginx:latest
+            --build-arg SMTP_USE_TLS=$SMTP_USE_TLS \
+            --build-arg VERSION=${{ env.VERSION }}
 
       - name: Push images to Docker Hub
         run: |
@@ -84,7 +79,7 @@ jobs:
       - name: Setup kubeconfig
         run: |
           mkdir -p ~/.kube
-          echo "${{ secrets.KUBECONFIG_CONTENT }}" |base64 -d > ~/.kube/config
+          echo "${{ secrets.KUBECONFIG_CONTENT }}" | base64 -d > ~/.kube/config
           chmod 600 ~/.kube/config
 
       - name: Install Helm
