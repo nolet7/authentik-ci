@@ -67,6 +67,16 @@ jobs:
             --build-arg SMTP_USE_TLS=$SMTP_USE_TLS \
             --build-arg VERSION=${{ env.VERSION }}
 
+          # Tag versioned and latest images
+          docker tag authentik-ci-authentik noletengine/authentik:${{ env.VERSION }}
+          docker tag authentik-ci-authentik noletengine/authentik:latest
+
+          docker tag authentik-ci-worker noletengine/authentik-worker:${{ env.VERSION }}
+          docker tag authentik-ci-worker noletengine/authentik-worker:latest
+
+          docker tag authentik-ci-nginx noletengine/nginx:${{ env.VERSION }}
+          docker tag authentik-ci-nginx noletengine/nginx:latest
+
       - name: Push images to Docker Hub
         run: |
           docker push noletengine/authentik:${{ env.VERSION }}
