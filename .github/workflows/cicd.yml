@@ -2,8 +2,7 @@ name: CI/CD - Build and Deploy Authentik
 
 on:
   push:
-    branches:
-      - master
+    branches: [master]
     paths:
       - Dockerfile
       - nginx.Dockerfile
@@ -12,29 +11,29 @@ on:
       - helm/**
       - .github/workflows/cicd.yml
 
+env:
+  VERSION: v1.0.${{ github.run_number }}
+
 jobs:
   cicd:
     runs-on: self-hosted
-
-    env:
-      VAULT_ADDR: http://192.168.0.116:8200
 
     steps:
       - name: Checkout repo
         uses: actions/checkout@v3
 
-      - name: Set VERSION
-        id: version
-        run: echo "VERSION=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
-
       - name: Install Vault CLI
         run: |
-          sudo curl -fsSL https://apt.releases.hashicorp.com/gpg | gpg --dearmor | sudo tee /usr/share/keyrings/hashicorp-archive-keyring.gpg > /dev/null
+          sudo apt-get update
+          sudo apt-get install -y gnupg curl lsb-release
+          curl -fsSL https://apt.releases.hashicorp.com/gpg | gpg --dearmor | sudo tee /usr/share/keyrings/hashicorp-archive-keyring.gpg > /dev/null
           echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
           sudo apt-get update && sudo apt-get install vault -y
 
-      - name: Authenticate to Vault using GitHub Token
+      - name: Authenticate to Vault
         run: echo "VAULT_TOKEN=${{ secrets.VAULT_TOKEN }}" >> $GITHUB_ENV
+        env:
+          VAULT_ADDR: http://192.168.0.116:8200
 
       - name: Pull secrets from Vault
         run: |
@@ -48,14 +47,15 @@ jobs:
           echo "SMTP_PASS=$(vault kv get -field=SMTP_PASS secret/Dev-secret/authentik)" >> $GITHUB_ENV
           echo "SMTP_USE_TLS=$(vault kv get -field=SMTP_USE_TLS secret/Dev-secret/authentik)" >> $GITHUB_ENV
           echo "REDIS_PASSWORD=$(vault kv get -field=REDIS_PASSWORD secret/Dev-secret/authentik)" >> $GITHUB_ENV
+        env:
+          VAULT_ADDR: http://192.168.0.116:8200
 
-      - name: Log in to DockerHub
+      - name: Docker login
         run: echo "${{ secrets.DOCKER_TOKEN }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
 
-      - name: Build and push authentik image
+      - name: Build and tag all images
         run: |
-          docker build \
-            --build-arg AUTHENTIK_SECRET_KEY=$AUTHENTIK_SECRET_KEY \
+          docker compose build --build-arg AUTHENTIK_SECRET_KEY=$AUTHENTIK_SECRET_KEY \
             --build-arg POSTGRES_USER=$POSTGRES_USER \
             --build-arg POSTGRES_PASSWORD=$POSTGRES_PASSWORD \
             --build-arg DATABASE_URL=$DATABASE_URL \
@@ -63,28 +63,28 @@ jobs:
             --build-arg SMTP_PORT=$SMTP_PORT \
             --build-arg SMTP_USER=$SMTP_USER \
             --build-arg SMTP_PASS=$SMTP_PASS \
-            --build-arg SMTP_USE_TLS=$SMTP_USE_TLS \
-            -t noletengine/authentik:${VERSION} \
-            -t noletengine/authentik:latest .
+            --build-arg SMTP_USE_TLS=$SMTP_USE_TLS
 
-          docker push noletengine/authentik:${VERSION}
+          docker tag authentik-ci-authentik noletengine/authentik:${{ env.VERSION }}
+          docker tag authentik-ci-authentik noletengine/authentik:latest
+          docker tag authentik-ci-worker noletengine/authentik-worker:${{ env.VERSION }}
+          docker tag authentik-ci-worker noletengine/authentik-worker:latest
+          docker tag authentik-ci-nginx noletengine/nginx:${{ env.VERSION }}
+          docker tag authentik-ci-nginx noletengine/nginx:latest
+
+      - name: Push images to Docker Hub
+        run: |
+          docker push noletengine/authentik:${{ env.VERSION }}
           docker push noletengine/authentik:latest
-
-      - name: Tag and push worker image
-        run: |
-          docker tag noletengine/authentik:${VERSION} noletengine/authentik:worker
-          docker push noletengine/authentik:worker
-
-      - name: Build and push nginx image
-        run: |
-          docker build -f nginx.Dockerfile -t noletengine/nginx:${VERSION} -t noletengine/nginx:alpine .
-          docker push noletengine/nginx:${VERSION}
-          docker push noletengine/nginx:alpine
+          docker push noletengine/authentik-worker:${{ env.VERSION }}
+          docker push noletengine/authentik-worker:latest
+          docker push noletengine/nginx:${{ env.VERSION }}
+          docker push noletengine/nginx:latest
 
       - name: Setup kubeconfig
         run: |
           mkdir -p ~/.kube
-          echo "${{ secrets.KUBECONFIG_CONTENT }}" > ~/.kube/config
+          echo "${{ secrets.KUBECONFIG_CONTENT }}" |base64 -d > ~/.kube/config
           chmod 600 ~/.kube/config
 
       - name: Install Helm
@@ -98,12 +98,11 @@ jobs:
           helm upgrade --install authentik ./helm \
             --namespace authentik \
             --create-namespace \
-            --set-string vault.role=authentik-role \
-            --set-string vault.secretPath=secret/Dev-secret/authentik \
-            --set image.tag=${VERSION} \
-            --set worker.tag=worker \
+            --set vault.secretPath=secret/Dev-secret/authentik \
+            --set image.tag=${{ env.VERSION }} \
+            --set worker.tag=${{ env.VERSION }} \
             --set redis.image.tag=alpine \
             --set postgresql.image.tag=15 \
-            --set nginx.image.tag=${VERSION} \
+            --set nginx.image.tag=${{ env.VERSION }} \
             --values helm/values.yaml
 
