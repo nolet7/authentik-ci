@@ -16,9 +16,16 @@ jobs:
   cicd:
     runs-on: self-hosted
 
+    env:
+      VAULT_ADDR: http://192.168.0.116:8200
+
     steps:
       - name: Checkout repo
         uses: actions/checkout@v3
+
+      - name: Set VERSION
+        id: version
+        run: echo "VERSION=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
 
       - name: Install Vault CLI
         run: |
@@ -28,8 +35,6 @@ jobs:
 
       - name: Authenticate to Vault using GitHub Token
         run: echo "VAULT_TOKEN=${{ secrets.VAULT_TOKEN }}" >> $GITHUB_ENV
-        env:
-          VAULT_ADDR: http://192.168.0.116:8200
 
       - name: Pull secrets from Vault
         run: |
@@ -42,39 +47,38 @@ jobs:
           echo "SMTP_USER=$(vault kv get -field=SMTP_USER secret/Dev-secret/authentik)" >> $GITHUB_ENV
           echo "SMTP_PASS=$(vault kv get -field=SMTP_PASS secret/Dev-secret/authentik)" >> $GITHUB_ENV
           echo "SMTP_USE_TLS=$(vault kv get -field=SMTP_USE_TLS secret/Dev-secret/authentik)" >> $GITHUB_ENV
-        env:
-          VAULT_ADDR: http://192.168.0.116:8200
+          echo "REDIS_PASSWORD=$(vault kv get -field=REDIS_PASSWORD secret/Dev-secret/authentik)" >> $GITHUB_ENV
 
-      - name: Login to DockerHub
+      - name: Log in to DockerHub
         run: echo "${{ secrets.DOCKER_TOKEN }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
 
-      - name: Build all services via Docker Compose
+      - name: Build and push authentik image
         run: |
-          docker-compose build
+          docker build \
+            --build-arg AUTHENTIK_SECRET_KEY=$AUTHENTIK_SECRET_KEY \
+            --build-arg POSTGRES_USER=$POSTGRES_USER \
+            --build-arg POSTGRES_PASSWORD=$POSTGRES_PASSWORD \
+            --build-arg DATABASE_URL=$DATABASE_URL \
+            --build-arg SMTP_HOST=$SMTP_HOST \
+            --build-arg SMTP_PORT=$SMTP_PORT \
+            --build-arg SMTP_USER=$SMTP_USER \
+            --build-arg SMTP_PASS=$SMTP_PASS \
+            --build-arg SMTP_USE_TLS=$SMTP_USE_TLS \
+            -t noletengine/authentik:${VERSION} \
+            -t noletengine/authentik:latest .
 
-      - name: Tag and push authentik image
-        run: |
-          docker tag authentik-ci-authentik noletengine/authentik:latest
+          docker push noletengine/authentik:${VERSION}
           docker push noletengine/authentik:latest
 
       - name: Tag and push worker image
         run: |
-          docker tag authentik-ci-worker noletengine/authentik:worker
+          docker tag noletengine/authentik:${VERSION} noletengine/authentik:worker
           docker push noletengine/authentik:worker
 
-      - name: Tag and push postgres image
+      - name: Build and push nginx image
         run: |
-          docker tag postgres:15 noletengine/postgres:15
-          docker push noletengine/postgres:15
-
-      - name: Tag and push redis image
-        run: |
-          docker tag redis:alpine noletengine/redis:7
-          docker push noletengine/redis:7
-
-      - name: Tag and push nginx image
-        run: |
-          docker tag authentik-ci-nginx noletengine/nginx:alpine
+          docker build -f nginx.Dockerfile -t noletengine/nginx:${VERSION} -t noletengine/nginx:alpine .
+          docker push noletengine/nginx:${VERSION}
           docker push noletengine/nginx:alpine
 
       - name: Setup kubeconfig
@@ -96,10 +100,10 @@ jobs:
             --create-namespace \
             --set-string vault.role=authentik-role \
             --set-string vault.secretPath=secret/Dev-secret/authentik \
-            --set image.tag=latest \
+            --set image.tag=${VERSION} \
             --set worker.tag=worker \
-            --set redis.image.tag=7 \
+            --set redis.image.tag=alpine \
             --set postgresql.image.tag=15 \
-            --set nginx.image.tag=alpine \
+            --set nginx.image.tag=${VERSION} \
             --values helm/values.yaml
 
