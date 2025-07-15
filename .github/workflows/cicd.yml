@@ -42,54 +42,39 @@ jobs:
           echo "SMTP_USER=$(vault kv get -field=SMTP_USER secret/Dev-secret/authentik)" >> $GITHUB_ENV
           echo "SMTP_PASS=$(vault kv get -field=SMTP_PASS secret/Dev-secret/authentik)" >> $GITHUB_ENV
           echo "SMTP_USE_TLS=$(vault kv get -field=SMTP_USE_TLS secret/Dev-secret/authentik)" >> $GITHUB_ENV
-          echo "REDIS_PASSWORD=$(vault kv get -field=REDIS_PASSWORD secret/Dev-secret/authentik)" >> $GITHUB_ENV
         env:
           VAULT_ADDR: http://192.168.0.116:8200
 
       - name: Login to DockerHub
         run: echo "${{ secrets.DOCKER_TOKEN }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
 
-      - name: Build and push authentik image
+      - name: Build all services via Docker Compose
         run: |
-          docker build \
-            --build-arg AUTHENTIK_SECRET_KEY=$AUTHENTIK_SECRET_KEY \
-            --build-arg POSTGRES_USER=$POSTGRES_USER \
-            --build-arg POSTGRES_PASSWORD=$POSTGRES_PASSWORD \
-            --build-arg DATABASE_URL=$DATABASE_URL \
-            --build-arg SMTP_HOST=$SMTP_HOST \
-            --build-arg SMTP_PORT=$SMTP_PORT \
-            --build-arg SMTP_USER=$SMTP_USER \
-            --build-arg SMTP_PASS=$SMTP_PASS \
-            --build-arg SMTP_USE_TLS=$SMTP_USE_TLS \
-            -t noletengine/authentik:latest .
+          docker-compose build
 
+      - name: Tag and push authentik image
+        run: |
+          docker tag authentik-ci-authentik noletengine/authentik:latest
           docker push noletengine/authentik:latest
 
       - name: Tag and push worker image
         run: |
-          docker tag noletengine/authentik:latest noletengine/authentik:worker
+          docker tag authentik-ci-worker noletengine/authentik:worker
           docker push noletengine/authentik:worker
 
-      - name: Build and push redis image
+      - name: Tag and push postgres image
         run: |
-          docker build \
-            --build-arg REDIS_PASSWORD=$REDIS_PASSWORD \
-            -f redis.Dockerfile \
-            -t noletengine/redis:7 .
-          docker push noletengine/redis:7
-
-      - name: Build and push postgres image
-        run: |
-          docker build \
-            --build-arg POSTGRES_USER=$POSTGRES_USER \
-            --build-arg POSTGRES_PASSWORD=$POSTGRES_PASSWORD \
-            -f postgres.Dockerfile \
-            -t noletengine/postgres:15 .
+          docker tag postgres:15 noletengine/postgres:15
           docker push noletengine/postgres:15
 
-      - name: Build and push nginx image
+      - name: Tag and push redis image
         run: |
-          docker build -f nginx.Dockerfile -t noletengine/nginx:alpine .
+          docker tag redis:alpine noletengine/redis:7
+          docker push noletengine/redis:7
+
+      - name: Tag and push nginx image
+        run: |
+          docker tag authentik-ci-nginx noletengine/nginx:alpine
           docker push noletengine/nginx:alpine
 
       - name: Setup kubeconfig
