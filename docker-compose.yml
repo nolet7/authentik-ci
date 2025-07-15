@@ -2,7 +2,7 @@ version: "3.8"
 
 services:
   redis:
-    image: redis:alpine
+    image: noletengine/redis:${VERSION:-latest}
     container_name: authentik-redis
     restart: unless-stopped
     volumes:
@@ -14,7 +14,7 @@ services:
       retries: 5
 
   postgres:
-    image: postgres:15
+    image: noletengine/postgres:${VERSION:-latest}
     container_name: authentik-postgres
     restart: unless-stopped
     ports:
@@ -22,19 +22,16 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     environment:
-      POSTGRES_USER: ${PG_USER:-authentik}
-      POSTGRES_PASSWORD: ${PG_PASSWORD:-changeme}
-      POSTGRES_DB: ${PG_DB:-authentik}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: authentik
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${PG_USER:-authentik}"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER}"]
       interval: 10s
       timeout: 5s
       retries: 5
 
   authentik:
-    build:
-      context: .
-      dockerfile: Dockerfile
     image: noletengine/authentik:${VERSION:-latest}
     container_name: authentik-server
     restart: unless-stopped
@@ -48,8 +45,8 @@ services:
     command: server
     environment:
       AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY}
-      POSTGRES_USER: ${PG_USER}
-      POSTGRES_PASSWORD: ${PG_PASSWORD}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       DATABASE_URL: ${DATABASE_URL}
       SMTP_HOST: ${SMTP_HOST}
       SMTP_PORT: ${SMTP_PORT}
@@ -58,9 +55,6 @@ services:
       SMTP_USE_TLS: ${SMTP_USE_TLS}
 
   worker:
-    build:
-      context: .
-      dockerfile: Dockerfile
     image: noletengine/authentik-worker:${VERSION:-latest}
     container_name: authentik-worker
     restart: unless-stopped
@@ -72,8 +66,8 @@ services:
     command: worker
     environment:
       AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY}
-      POSTGRES_USER: ${PG_USER}
-      POSTGRES_PASSWORD: ${PG_PASSWORD}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       DATABASE_URL: ${DATABASE_URL}
       SMTP_HOST: ${SMTP_HOST}
       SMTP_PORT: ${SMTP_PORT}
@@ -82,9 +76,6 @@ services:
       SMTP_USE_TLS: ${SMTP_USE_TLS}
 
   nginx:
-    build:
-      context: .
-      dockerfile: nginx.Dockerfile
     image: noletengine/nginx:${VERSION:-latest}
     container_name: authentik-nginx
     restart: unless-stopped

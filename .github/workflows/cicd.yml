@@ -4,8 +4,7 @@ on:
   push:
     branches: [master]
     paths:
-      - Dockerfile
-      - nginx.Dockerfile
+      - Dockerfile*
       - docker-compose.yml
       - nginx.conf
       - helm/**
@@ -55,27 +54,24 @@ jobs:
 
       - name: Build and tag all images
         run: |
-          docker compose build \
-            --build-arg AUTHENTIK_SECRET_KEY=$AUTHENTIK_SECRET_KEY \
-            --build-arg POSTGRES_USER=$POSTGRES_USER \
-            --build-arg POSTGRES_PASSWORD=$POSTGRES_PASSWORD \
-            --build-arg DATABASE_URL=$DATABASE_URL \
-            --build-arg SMTP_HOST=$SMTP_HOST \
-            --build-arg SMTP_PORT=$SMTP_PORT \
-            --build-arg SMTP_USER=$SMTP_USER \
-            --build-arg SMTP_PASS=$SMTP_PASS \
-            --build-arg SMTP_USE_TLS=$SMTP_USE_TLS \
-            --build-arg VERSION=${{ env.VERSION }}
+          docker build -f Dockerfile.authentik -t noletengine/authentik:${{ env.VERSION }} \
+            --build-arg AUTHENTIK_SECRET_KEY=${{ env.AUTHENTIK_SECRET_KEY }} .
+          docker tag noletengine/authentik:${{ env.VERSION }} noletengine/authentik:latest
 
-          # Tag versioned and latest images
-          docker tag authentik-ci-authentik noletengine/authentik:${{ env.VERSION }}
-          docker tag authentik-ci-authentik noletengine/authentik:latest
+          docker build -f Dockerfile.authentik -t noletengine/authentik-worker:${{ env.VERSION }} \
+            --build-arg AUTHENTIK_SECRET_KEY=${{ env.AUTHENTIK_SECRET_KEY }} .
+          docker tag noletengine/authentik-worker:${{ env.VERSION }} noletengine/authentik-worker:latest
 
-          docker tag authentik-ci-worker noletengine/authentik-worker:${{ env.VERSION }}
-          docker tag authentik-ci-worker noletengine/authentik-worker:latest
+          docker build -f Dockerfile.nginx -t noletengine/nginx:${{ env.VERSION }} .
+          docker tag noletengine/nginx:${{ env.VERSION }} noletengine/nginx:latest
 
-          docker tag authentik-ci-nginx noletengine/nginx:${{ env.VERSION }}
-          docker tag authentik-ci-nginx noletengine/nginx:latest
+          docker build -f Dockerfile.redis -t noletengine/redis:${{ env.VERSION }} .
+          docker tag noletengine/redis:${{ env.VERSION }} noletengine/redis:latest
+
+          docker build -f Dockerfile.postgres -t noletengine/postgres:${{ env.VERSION }} \
+            --build-arg POSTGRES_USER=${{ env.POSTGRES_USER }} \
+            --build-arg POSTGRES_PASSWORD=${{ env.POSTGRES_PASSWORD }} .
+          docker tag noletengine/postgres:${{ env.VERSION }} noletengine/postgres:latest
 
       - name: Push images to Docker Hub
         run: |
@@ -85,6 +81,10 @@ jobs:
           docker push noletengine/authentik-worker:latest
           docker push noletengine/nginx:${{ env.VERSION }}
           docker push noletengine/nginx:latest
+          docker push noletengine/redis:${{ env.VERSION }}
+          docker push noletengine/redis:latest
+          docker push noletengine/postgres:${{ env.VERSION }}
+          docker push noletengine/postgres:latest
 
       - name: Setup kubeconfig
         run: |
@@ -106,8 +106,10 @@ jobs:
             --set vault.secretPath=secret/Dev-secret/authentik \
             --set image.tag=${{ env.VERSION }} \
             --set worker.tag=${{ env.VERSION }} \
-            --set redis.image.tag=alpine \
-            --set postgresql.image.tag=15 \
+            --set redis.image.repository=noletengine/redis \
+            --set redis.image.tag=${{ env.VERSION }} \
+            --set postgresql.image.repository=noletengine/postgres \
+            --set postgresql.image.tag=${{ env.VERSION }} \
             --set nginx.image.tag=${{ env.VERSION }} \
             --values helm/values.yaml
 
