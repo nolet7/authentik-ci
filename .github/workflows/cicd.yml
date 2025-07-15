@@ -1,0 +1,120 @@
+name: CI/CD - Build and Deploy Authentik
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - Dockerfile
+      - nginx.Dockerfile
+      - docker-compose.yml
+      - nginx.conf
+      - helm/**
+      - .github/workflows/cicd.yml
+
+jobs:
+  cicd:
+    runs-on: self-hosted
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Install Vault CLI
+        run: |
+          sudo curl -fsSL https://apt.releases.hashicorp.com/gpg | gpg --dearmor | sudo tee /usr/share/keyrings/hashicorp-archive-keyring.gpg > /dev/null
+          echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
+          sudo apt-get update && sudo apt-get install vault -y
+
+      - name: Authenticate to Vault using GitHub Token
+        run: echo "VAULT_TOKEN=${{ secrets.VAULT_TOKEN }}" >> $GITHUB_ENV
+        env:
+          VAULT_ADDR: http://192.168.0.116:8200
+
+      - name: Pull secrets from Vault
+        run: |
+          echo "AUTHENTIK_SECRET_KEY=$(vault kv get -field=AUTHENTIK_SECRET_KEY secret/Dev-secret/authentik)" >> $GITHUB_ENV
+          echo "POSTGRES_USER=$(vault kv get -field=POSTGRES_USER secret/Dev-secret/authentik)" >> $GITHUB_ENV
+          echo "POSTGRES_PASSWORD=$(vault kv get -field=POSTGRES_PASSWORD secret/Dev-secret/authentik)" >> $GITHUB_ENV
+          echo "DATABASE_URL=$(vault kv get -field=DATABASE_URL secret/Dev-secret/authentik)" >> $GITHUB_ENV
+          echo "SMTP_HOST=$(vault kv get -field=SMTP_HOST secret/Dev-secret/authentik)" >> $GITHUB_ENV
+          echo "SMTP_PORT=$(vault kv get -field=SMTP_PORT secret/Dev-secret/authentik)" >> $GITHUB_ENV
+          echo "SMTP_USER=$(vault kv get -field=SMTP_USER secret/Dev-secret/authentik)" >> $GITHUB_ENV
+          echo "SMTP_PASS=$(vault kv get -field=SMTP_PASS secret/Dev-secret/authentik)" >> $GITHUB_ENV
+          echo "SMTP_USE_TLS=$(vault kv get -field=SMTP_USE_TLS secret/Dev-secret/authentik)" >> $GITHUB_ENV
+          echo "REDIS_PASSWORD=$(vault kv get -field=REDIS_PASSWORD secret/Dev-secret/authentik)" >> $GITHUB_ENV
+        env:
+          VAULT_ADDR: http://192.168.0.116:8200
+
+      - name: Login to DockerHub
+        run: echo "${{ secrets.DOCKER_TOKEN }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+
+      - name: Build and push authentik image
+        run: |
+          docker build \
+            --build-arg AUTHENTIK_SECRET_KEY=$AUTHENTIK_SECRET_KEY \
+            --build-arg POSTGRES_USER=$POSTGRES_USER \
+            --build-arg POSTGRES_PASSWORD=$POSTGRES_PASSWORD \
+            --build-arg DATABASE_URL=$DATABASE_URL \
+            --build-arg SMTP_HOST=$SMTP_HOST \
+            --build-arg SMTP_PORT=$SMTP_PORT \
+            --build-arg SMTP_USER=$SMTP_USER \
+            --build-arg SMTP_PASS=$SMTP_PASS \
+            --build-arg SMTP_USE_TLS=$SMTP_USE_TLS \
+            -t noletengine/authentik:latest .
+
+          docker push noletengine/authentik:latest
+
+      - name: Tag and push worker image
+        run: |
+          docker tag noletengine/authentik:latest noletengine/authentik:worker
+          docker push noletengine/authentik:worker
+
+      - name: Build and push redis image
+        run: |
+          docker build \
+            --build-arg REDIS_PASSWORD=$REDIS_PASSWORD \
+            -f redis.Dockerfile \
+            -t noletengine/redis:7 .
+          docker push noletengine/redis:7
+
+      - name: Build and push postgres image
+        run: |
+          docker build \
+            --build-arg POSTGRES_USER=$POSTGRES_USER \
+            --build-arg POSTGRES_PASSWORD=$POSTGRES_PASSWORD \
+            -f postgres.Dockerfile \
+            -t noletengine/postgres:15 .
+          docker push noletengine/postgres:15
+
+      - name: Build and push nginx image
+        run: |
+          docker build -f nginx.Dockerfile -t noletengine/nginx:alpine .
+          docker push noletengine/nginx:alpine
+
+      - name: Setup kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG_CONTENT }}" > ~/.kube/config
+          chmod 600 ~/.kube/config
+
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+
+      - name: Helm dependency update
+        run: helm dependency update ./helm
+
+      - name: Deploy via Helm
+        run: |
+          helm upgrade --install authentik ./helm \
+            --namespace authentik \
+            --create-namespace \
+            --set-string vault.role=authentik-role \
+            --set-string vault.secretPath=secret/Dev-secret/authentik \
+            --set image.tag=latest \
+            --set worker.tag=worker \
+            --set redis.image.tag=7 \
+            --set postgresql.image.tag=15 \
+            --set nginx.image.tag=alpine \
+            --values helm/values.yaml
+

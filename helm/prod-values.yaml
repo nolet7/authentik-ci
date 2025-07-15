@@ -1,0 +1,10 @@
+global:
+  domainName: "authentik.srespace.tech"
+  tlsSecretName: "authentik-prod-tls"
+  image:
+    tag: "stable"
+  workerTag: "stable"
+  postgresTag: "15"
+  redisTag: "7"
+  pvcStorageSize: 5Gi
+

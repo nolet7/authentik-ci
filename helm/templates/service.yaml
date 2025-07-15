@@ -1,0 +1,27 @@
+{{- define "authentik.services" }}
+{{- range $name, $svc := .Values.microservices }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ printf "%s-service" $name }}
+  namespace: {{ $.Values.namespace }}
+  labels:
+    app.kubernetes.io/name: {{ $name }}
+    app.kubernetes.io/instance: {{ $.Release.Name }}
+spec:
+  type: {{ $svc.service.type | default "ClusterIP" }}
+  selector:
+    app.kubernetes.io/name: {{ $name }}
+    app.kubernetes.io/instance: {{ $.Release.Name }}
+  ports:
+    {{- range $index, $port := $svc.ports }}
+    - name: port-{{ $port }}
+      port: {{ $svc.service.port | default $port }}
+      targetPort: {{ $svc.service.targetPort | default $port }}
+    {{- end }}
+{{- end }}
+{{- end }}
+
+{{- include "authentik.services" . }}
+

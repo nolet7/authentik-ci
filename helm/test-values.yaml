@@ -1,0 +1,9 @@
+global:
+  domainName: "test-authentik.srespace.tech"
+  tlsSecretName: "authentik-test-tls"
+  image:
+    tag: "test"
+  workerTag: "test"
+  postgresTag: "15"
+  redisTag: "7"
+  pvcStorageSize: 1Gi

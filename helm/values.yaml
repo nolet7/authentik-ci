@@ -1,0 +1,139 @@
+# Global settings for reusability
+global:
+  domainName: "authentik.srespace.tech"
+  tlsSecretName: "tls-secret"
+  image:
+    tag: "latest"
+  workerTag: "worker"
+  postgresTag: "15"
+  redisTag: "alpine"
+  pvcStorageSize: 512Mi
+  storageClass: "standard"
+
+# Namespace for all resources
+namespace: authentik
+
+# Replica count for Deployments
+replicaCount: 1
+
+# Microservice definitions
+microservices:
+  authentik:
+    image:
+      repository: noletengine/authentik
+      tag: "{{ .Values.global.image.tag }}"
+      pullPolicy: IfNotPresent
+    command: ["server"]
+    ports: [9000]
+    envFrom:
+      secretRef: authentik-secrets
+    volumeMounts:
+      - name: media
+        mountPath: /media
+    livenessProbe:
+      httpGet:
+        path: /healthz
+        port: 9000
+      initialDelaySeconds: 10
+      periodSeconds: 30
+    readinessProbe:
+      httpGet:
+        path: /healthz
+        port: 9000
+      initialDelaySeconds: 5
+      periodSeconds: 10
+    service:
+      port: 9000
+      targetPort: 9000
+      type: ClusterIP
+
+  worker:
+    image:
+      repository: noletengine/authentik
+      tag: "{{ .Values.global.workerTag }}"
+      pullPolicy: IfNotPresent
+    command: ["worker"]
+    ports: [9001]
+    envFrom:
+      secretRef: authentik-secrets
+    volumeMounts:
+      - name: media
+        mountPath: /media
+    service:
+      port: 9001
+      targetPort: 9001
+      type: ClusterIP
+
+  nginx:
+    image:
+      repository: nginx
+      tag: alpine
+      pullPolicy: IfNotPresent
+    ports: [443, 80]
+    volumeMounts:
+      - name: nginx-config
+        mountPath: /etc/nginx/conf.d
+      - name: tls-certs
+        mountPath: /etc/letsencrypt/live/{{ .Values.global.domainName }}
+    service:
+      port: 443
+      targetPort: 443
+      type: ClusterIP
+
+  postgres:
+    image:
+      repository: postgres
+      tag: "{{ .Values.global.postgresTag }}"
+      pullPolicy: IfNotPresent
+    ports: [5432]
+    envFrom:
+      secretRef: postgres-secrets
+    volumeMounts:
+      - name: postgres-data
+        mountPath: /var/lib/postgresql/data
+    service:
+      port: 5432
+      targetPort: 5432
+      type: ClusterIP
+
+  redis:
+    image:
+      repository: redis
+      tag: "{{ .Values.global.redisTag }}"
+      pullPolicy: IfNotPresent
+    ports: [6379]
+    volumeMounts:
+      - name: redis-data
+        mountPath: /data
+    service:
+      port: 6379
+      targetPort: 6379
+      type: ClusterIP
+
+# Volumes and storage configuration
+volumes:
+  - name: media
+    emptyDir: {}
+
+  - name: nginx-config
+    configMap:
+      name: nginx-config
+
+  - name: tls-certs
+    secret:
+      secretName: "{{ .Values.global.tlsSecretName }}"
+
+  - name: postgres-data
+    storage: 2Gi
+    storageClass: "{{ .Values.global.storageClass }}"
+
+  - name: redis-data
+    storage: 1Gi
+    storageClass: "{{ .Values.global.storageClass }}"
+
+# Ingress setup
+ingress:
+  enabled: true
+  host: "{{ .Values.global.domainName }}"
+  tlsSecretName: "{{ .Values.global.tlsSecretName }}"
+

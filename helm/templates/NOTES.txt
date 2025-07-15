@@ -1,0 +1,10 @@
+Your Authentik application has been deployed!
+
+To access it via HTTPS:
+  1. Ensure TLS certs are mounted from:
+     {{ .Values.nginx.tlsHostPath }}
+  2. DNS: Point {{ .Values.global.domainName }} to your ingress/load balancer.
+
+Then run:
+  kubectl port-forward svc/{{ include "authentik.fullname" . }} {{ .Values.service.port }} -n {{ .Release.Namespace }}
+

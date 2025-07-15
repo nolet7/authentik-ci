@@ -1,0 +1,32 @@
+{{- define "authentik.persistentVolumeClaims" -}}
+{{- range $name, $svc := .Values.microservices }}
+{{- if hasKey $svc "volumeMounts" }}
+{{- range $vol := $svc.volumeMounts }}
+{{- $volName := $vol.name }}
+{{- range $.Values.volumes }}
+{{- if and (eq .name $volName) (hasKey . "storage") }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $vol.name }}
+  namespace: {{ $.Values.namespace }}
+  labels:
+    app.kubernetes.io/name: {{ $name }}
+    app.kubernetes.io/instance: {{ $.Release.Name }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .storage | default $.Values.global.pvcStorageSize }}
+  storageClassName: {{ .storageClass | default "standard" }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
+
+{{ include "authentik.persistentVolumeClaims" . }}
+

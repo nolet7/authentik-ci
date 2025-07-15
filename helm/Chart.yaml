@@ -1,0 +1,7 @@
+apiVersion: v2
+name: authentik
+version: 0.1.0
+description: Helm chart for deploying Authentik with PostgreSQL, Redis, and NGINX
+appVersion: "2024.7"
+type: application
+

@@ -1,0 +1,34 @@
+{{- define "authentik.configmaps" -}}
+{{- range $name, $svc := .Values.microservices }}
+{{- if eq $name "nginx" }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-config
+  namespace: {{ $.Values.namespace }}
+  labels:
+    app.kubernetes.io/name: nginx
+    app.kubernetes.io/instance: {{ $.Release.Name }}
+data:
+  default.conf: |
+    server {
+        listen 443 ssl;
+        server_name authentik.srespace.tech;
+
+        ssl_certificate     /etc/letsencrypt/live/authentik.srespace.tech/fullchain.pem;
+        ssl_certificate_key /etc/letsencrypt/live/authentik.srespace.tech/privkey.pem;
+
+        location / {
+            proxy_pass http://authentik:9000;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+    }
+{{- end }}
+{{- end }}
+{{- end }}
+{{ include "authentik.configmaps" . }}
+

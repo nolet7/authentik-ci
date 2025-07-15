@@ -1,0 +1,109 @@
+# dev-values.yaml
+
+namespace: authentik
+
+global:
+  domainName: "dev-authentik.srespace.tech"
+  tlsSecretName: "authentik-dev-tls"
+  image:
+    tag: "dev"
+  workerTag: "dev"
+  postgresTag: "15"
+  redisTag: "7"
+  pvcStorageSize: 512Mi
+
+replicaCount: 1
+
+serviceAccount:
+  annotations: {}
+
+microservices:
+  authentik:
+    image:
+      repository: noletengine/authentik
+      tag: "{{ .Values.global.image.tag }}"
+      pullPolicy: IfNotPresent
+    command: ["server"]
+    ports: [9000]
+    envFrom:
+      secretRef: authentik-secrets
+    livenessProbe:
+      httpGet:
+        path: /healthz
+        port: 9000
+      initialDelaySeconds: 10
+      periodSeconds: 30
+    readinessProbe:
+      httpGet:
+        path: /healthz
+        port: 9000
+      initialDelaySeconds: 5
+      periodSeconds: 10
+    service:
+      port: 9000
+      targetPort: 9000
+      type: ClusterIP
+
+  worker:
+    image:
+      repository: noletengine/authentik
+      tag: "{{ .Values.global.workerTag }}"
+      pullPolicy: IfNotPresent
+    command: ["worker"]
+    ports: [9001]
+    envFrom:
+      secretRef: authentik-secrets
+    service:
+      port: 9001
+      targetPort: 9001
+      type: ClusterIP
+
+  nginx:
+    image:
+      repository: nginx
+      tag: alpine
+      pullPolicy: IfNotPresent
+    ports: [80, 443]
+    service:
+      port: 443
+      targetPort: 443
+      type: ClusterIP
+
+  postgres:
+    image:
+      repository: postgres
+      tag: "{{ .Values.global.postgresTag }}"
+      pullPolicy: IfNotPresent
+    ports: [5432]
+    envFrom:
+      secretRef: postgres-secrets
+    service:
+      port: 5432
+      targetPort: 5432
+      type: ClusterIP
+
+  redis:
+    image:
+      repository: redis
+      tag: "{{ .Values.global.redisTag }}"
+      pullPolicy: IfNotPresent
+    ports: [6379]
+    service:
+      port: 6379
+      targetPort: 6379
+      type: ClusterIP
+
+volumes:
+  - name: media
+    emptyDir: {}
+  - name: nginx-config
+    configMap:
+      name: nginx-config
+  - name: tls-certs
+    secret:
+      secretName: "{{ .Values.global.tlsSecretName }}"
+  - name: postgres-data
+    emptyDir: {}
+  - name: redis-data
+    emptyDir: {}
+

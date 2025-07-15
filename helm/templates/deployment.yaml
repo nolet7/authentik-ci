@@ -1,0 +1,97 @@
+{{- $fullName := include "authentik.fullname" . }}
+{{- $labels := include "authentik.labels" . }}
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $fullName }}
+  labels: {{- $labels | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ $fullName }}
+  template:
+    metadata:
+      labels:
+        app: {{ $fullName }}
+    spec:
+      containers:
+        - name: authentik
+          image: "{{ .Values.authentik.image.repository }}:{{ .Values.authentik.image.tag }}"
+          imagePullPolicy: {{ .Values.authentik.image.pullPolicy }}
+          command: ["server"]
+          envFrom:
+            - secretRef:
+                name: {{ .Values.authentik.secretRef }}
+          volumeMounts:
+            - name: media
+              mountPath: /media
+          ports:
+            - containerPort: 9000
+          livenessProbe:
+            httpGet:
+              path: /ping
+              port: 9000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: 9000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+        - name: worker
+          image: "{{ .Values.worker.image.repository }}:{{ .Values.worker.image.tag }}"
+          imagePullPolicy: {{ .Values.worker.image.pullPolicy }}
+          command: ["worker"]
+          envFrom:
+            - secretRef:
+                name: {{ .Values.worker.secretRef }}
+          volumeMounts:
+            - name: media
+              mountPath: /media
+        - name: redis
+          image: "{{ .Values.redis.image.repository }}:{{ .Values.redis.image.tag }}"
+          imagePullPolicy: {{ .Values.redis.image.pullPolicy }}
+          ports:
+            - containerPort: 6379
+          volumeMounts:
+            - name: redis-data
+              mountPath: /data
+        - name: postgres
+          image: "{{ .Values.postgres.image.repository }}:{{ .Values.postgres.image.tag }}"
+          imagePullPolicy: {{ .Values.postgres.image.pullPolicy }}
+          envFrom:
+            - secretRef:
+                name: {{ .Values.postgres.secretRef }}
+          ports:
+            - containerPort: 5432
+          volumeMounts:
+            - name: pg-data
+              mountPath: /var/lib/postgresql/data
+        - name: nginx
+          image: "{{ .Values.nginx.image.repository }}:{{ .Values.nginx.image.tag }}"
+          imagePullPolicy: {{ .Values.nginx.image.pullPolicy }}
+          ports:
+            - containerPort: 443
+            - containerPort: 80
+          volumeMounts:
+            - name: nginx-conf
+              mountPath: /etc/nginx/conf.d
+            - name: ssl-cert
+              mountPath: /etc/letsencrypt
+      volumes:
+        - name: media
+          emptyDir: {}
+        - name: redis-data
+          emptyDir: {}
+        - name: pg-data
+          emptyDir: {}
+        - name: nginx-conf
+          configMap:
+            name: {{ .Values.nginx.configMapRef }}
+        - name: ssl-cert
+          secret:
+            secretName: {{ .Values.nginx.sslSecretRef }}
+
