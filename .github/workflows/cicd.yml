@@ -66,23 +66,8 @@ jobs:
             --build-arg SMTP_PASS=${{ env.SMTP_PASS }} \
             --build-arg SMTP_USE_TLS=${{ env.SMTP_USE_TLS }}
 
-      - name: Tag and push all built images
+      - name: Push all built images
         run: |
-          docker tag authentik-ci-authentik noletengine/authentik:${{ env.VERSION }}
-          docker tag authentik-ci-authentik noletengine/authentik:latest
-
-          docker tag authentik-ci-worker noletengine/authentik-worker:${{ env.VERSION }}
-          docker tag authentik-ci-worker noletengine/authentik-worker:latest
-
-          docker tag authentik-ci-nginx noletengine/nginx:${{ env.VERSION }}
-          docker tag authentik-ci-nginx noletengine/nginx:latest
-
-          docker tag authentik-ci-redis noletengine/redis:${{ env.VERSION }}
-          docker tag authentik-ci-redis noletengine/redis:latest
-
-          docker tag authentik-ci-postgres noletengine/postgres:${{ env.VERSION }}
-          docker tag authentik-ci-postgres noletengine/postgres:latest
-
           docker push noletengine/authentik:${{ env.VERSION }}
           docker push noletengine/authentik:latest
 
